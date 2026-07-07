@@ -1,0 +1,31 @@
+name: Daily XRP Rule of Thirds
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 0 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  calculate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Calculate XRP/USDT Rule of Thirds
+        run: python calculate_rule_of_thirds.py --symbol XRPUSDT --interval 1d
+
+      - name: Commit updated results
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update XRP/USDT rule of thirds"
+          file_pattern: "index.html results/latest.md results/history.csv"
