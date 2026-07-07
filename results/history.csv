@@ -1,0 +1,2 @@
+symbol,interval,candle_date_utc,candle_open_time_utc,candle_close_time_utc,high,low,range,one_third,level_1_low_third,level_2_middle,level_3_high_average,calculated_at_utc,data_source
+XRP-USDT,1Dutc,2026-07-06,2026-07-06T00:00:00+00:00,2026-07-06T23:59:59.999000+00:00,1.1648,1.1094,0.0554,0.01846667,1.12786667,1.14633333,1.1648,2026-07-07T01:19:28.224467+00:00,OKX public candles

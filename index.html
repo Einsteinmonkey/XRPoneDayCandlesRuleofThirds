@@ -5,15 +5,123 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XRP/USDT Rule of Thirds</title>
   <style>
-    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d1117;color:#f0f6fc;font-family:Arial,Helvetica,sans-serif;padding:24px;box-sizing:border-box}main{max-width:720px;width:100%;background:#161b22;border:1px solid #30363d;border-radius:20px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.35)}h1{margin:0 0 8px;font-size:clamp(28px,5vw,44px)}p{color:#8b949e;line-height:1.5}.box{border:1px solid #30363d;background:#0d1117;border-radius:16px;padding:18px;margin-top:16px}
+    :root {
+      color-scheme: dark;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #0d1117;
+      color: #f0f6fc;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+      box-sizing: border-box;
+    }
+    main {
+      width: min(760px, 100%);
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(28px, 5vw, 44px);
+      letter-spacing: -.03em;
+    }
+    .subtitle {
+      margin: 0 0 26px;
+      color: #8b949e;
+      font-size: 15px;
+    }
+    .price-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .card {
+      border: 1px solid #30363d;
+      background: #0d1117;
+      border-radius: 16px;
+      padding: 18px;
+    }
+    .label {
+      display: block;
+      color: #8b949e;
+      font-size: 13px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .value {
+      font-size: clamp(24px, 6vw, 40px);
+      font-weight: 800;
+      line-height: 1.05;
+      word-break: break-word;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+      margin-top: 14px;
+    }
+    th, td {
+      padding: 14px 12px;
+      border-bottom: 1px solid #30363d;
+      text-align: left;
+    }
+    th { color: #8b949e; font-weight: 600; }
+    td:last-child, th:last-child { text-align: right; font-weight: 700; }
+    tr:last-child td { border-bottom: 0; }
+    .meta {
+      margin-top: 18px;
+      color: #8b949e;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    @media (max-width: 620px) {
+      main { padding: 20px; }
+      .price-grid { grid-template-columns: 1fr; }
+      th, td { padding: 12px 8px; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>XRP/USDT Rule of Thirds</h1>
-    <div class="box">
-      <p>No result yet. Run the GitHub Action once and this page will update automatically with only the latest result.</p>
-    </div>
+    <h1>XRP-USDT Rule of Thirds</h1>
+    <p class="subtitle">1-day candle · 2026-07-06</p>
+
+    <section class="price-grid">
+      <div class="card">
+        <span class="label">Low</span>
+        <div class="value">1.1094</div>
+      </div>
+      <div class="card">
+        <span class="label">High</span>
+        <div class="value">1.1648</div>
+      </div>
+    </section>
+
+    <table aria-label="XRP USDT rule of thirds results">
+      <tr><th>Result</th><th>Price</th></tr>
+      <tr><td>Range</td><td>0.0554</td></tr>
+      <tr><td>One Third</td><td>0.01846667</td></tr>
+      <tr><td>Level 1</td><td>1.12786667</td></tr>
+      <tr><td>Level 2 / Middle</td><td>1.14633333</td></tr>
+      <tr><td>Level 3 / High Average</td><td>1.1648</td></tr>
+    </table>
+
+    <p class="meta">
+      Candle close UTC: 2026-07-06T23:59:59.999000+00:00<br>
+      Last updated UTC: 2026-07-07T01:19:28.224467+00:00<br>
+      Source: OKX public candles
+    </p>
   </main>
 </body>
 </html>
