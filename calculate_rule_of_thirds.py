@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""XRP/USDT daily candle Rule of Thirds calculator."""
+"""XRP/USDT daily candle Rule of Thirds calculator.
+
+Uses OKX public market candles instead of Binance because Binance can return
+HTTP 451 from GitHub-hosted runners in restricted locations.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ import argparse
 import csv
 import html
 import json
+import re
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -20,10 +25,11 @@ from urllib.request import Request, urlopen
 
 getcontext().prec = 28
 
-BINANCE_BASE_URL = "https://api.binance.com"
-KLINES_ENDPOINT = "/api/v3/klines"
-DEFAULT_SYMBOL = "XRPUSDT"
-DEFAULT_INTERVAL = "1d"
+OKX_BASE_URL = "https://www.okx.com"
+OKX_CANDLES_ENDPOINT = "/api/v5/market/candles"
+DEFAULT_SYMBOL = "XRP-USDT"
+# 1Dutc keeps the daily candle aligned to 00:00 UTC.
+DEFAULT_INTERVAL = "1Dutc"
 
 
 @dataclass(frozen=True)
@@ -41,10 +47,63 @@ class RuleOfThirdsResult:
     level_2_middle: str
     level_3_high_average: str
     calculated_at_utc: str
+    data_source: str
+
+
+def normalize_symbol(symbol: str) -> str:
+    """Convert XRPUSDT to OKX format XRP-USDT, while allowing XRP-USDT."""
+    s = symbol.strip().upper().replace("/", "-").replace("_", "-")
+    if "-" in s:
+        return s
+    known_quotes = ("USDT", "USD", "USDC", "BTC", "ETH")
+    for quote in known_quotes:
+        if s.endswith(quote) and len(s) > len(quote):
+            return f"{s[:-len(quote)]}-{quote}"
+    return s
+
+
+def normalize_interval(interval: str) -> str:
+    """Map Binance-style 1d to OKX UTC daily candle format."""
+    i = interval.strip()
+    mapping = {
+        "1d": "1Dutc",
+        "1D": "1Dutc",
+        "1day": "1Dutc",
+        "1Day": "1Dutc",
+        "1Dutc": "1Dutc",
+        "1DUTC": "1Dutc",
+    }
+    return mapping.get(i, i)
 
 
 def utc_from_ms(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+
+
+def interval_to_ms(interval: str) -> int | None:
+    # Handles the intervals this project needs and common OKX intervals.
+    interval = interval.replace("utc", "").replace("UTC", "")
+    match = re.fullmatch(r"(\d+)([smHDWM])", interval)
+    if not match:
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2)
+    return {
+        "s": 1000,
+        "m": 60 * 1000,
+        "H": 60 * 60 * 1000,
+        "D": 24 * 60 * 60 * 1000,
+        "W": 7 * 24 * 60 * 60 * 1000,
+        # Month length varies, so do not calculate a fixed close time for M.
+        "M": None,
+    }[unit] and amount * {
+        "s": 1000,
+        "m": 60 * 1000,
+        "H": 60 * 60 * 1000,
+        "D": 24 * 60 * 60 * 1000,
+        "W": 7 * 24 * 60 * 60 * 1000,
+        "M": 0,
+    }[unit]
 
 
 def decimal_to_string(value: Decimal, places: int = 8) -> str:
@@ -53,42 +112,69 @@ def decimal_to_string(value: Decimal, places: int = 8) -> str:
     return format(rounded.normalize(), "f")
 
 
-def fetch_klines(symbol: str, interval: str, limit: int = 5) -> list[list[Any]]:
-    params = urlencode({"symbol": symbol.upper(), "interval": interval, "limit": limit})
-    url = f"{BINANCE_BASE_URL}{KLINES_ENDPOINT}?{params}"
-    request = Request(url, headers={"User-Agent": "xrp-rule-of-thirds/1.0"})
+def fetch_okx_candles(symbol: str, interval: str, limit: int = 5) -> list[list[Any]]:
+    inst_id = normalize_symbol(symbol)
+    bar = normalize_interval(interval)
+    params = urlencode({"instId": inst_id, "bar": bar, "limit": str(limit)})
+    url = f"{OKX_BASE_URL}{OKX_CANDLES_ENDPOINT}?{params}"
+    request = Request(url, headers={"User-Agent": "xrp-rule-of-thirds/1.1"})
 
     try:
         with urlopen(request, timeout=20) as response:
             body = response.read().decode("utf-8")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Binance API HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"OKX API HTTP {exc.code}: {detail}") from exc
     except URLError as exc:
-        raise RuntimeError(f"Could not connect to Binance API: {exc.reason}") from exc
+        raise RuntimeError(f"Could not connect to OKX API: {exc.reason}") from exc
 
     data = json.loads(body)
-    if not isinstance(data, list):
-        raise RuntimeError(f"Unexpected Binance API response: {data}")
-    return data
+    if not isinstance(data, dict) or data.get("code") != "0":
+        raise RuntimeError(f"Unexpected OKX API response: {data}")
+
+    candles = data.get("data", [])
+    if not isinstance(candles, list) or not candles:
+        raise RuntimeError(f"No candle data returned for {inst_id} {bar}.")
+    return candles
 
 
-def select_latest_closed_kline(klines: list[list[Any]]) -> list[Any]:
+def select_latest_closed_okx_candle(candles: list[list[Any]], interval: str) -> list[Any]:
+    """OKX candle format: [ts, open, high, low, close, vol, volCcy, volCcyQuote, confirm]."""
     now_ms = int(time.time() * 1000)
-    closed = [k for k in klines if int(k[6]) <= now_ms]
+    bar_ms = interval_to_ms(normalize_interval(interval))
+
+    closed: list[list[Any]] = []
+    for candle in candles:
+        if len(candle) < 5:
+            continue
+        open_time_ms = int(candle[0])
+        confirm = str(candle[8]) if len(candle) > 8 else ""
+        confirmed_by_api = confirm == "1"
+        confirmed_by_time = (bar_ms is not None and open_time_ms + bar_ms <= now_ms)
+        if confirmed_by_api or confirmed_by_time:
+            closed.append(candle)
+
     if not closed:
-        raise RuntimeError("No fully closed candle found in the returned kline data.")
-    return closed[-1]
+        raise RuntimeError("No fully closed candle found in the returned OKX candle data.")
+
+    # OKX commonly returns newest first; sorting avoids relying on response order.
+    return sorted(closed, key=lambda row: int(row[0]))[-1]
 
 
 def calculate(symbol: str = DEFAULT_SYMBOL, interval: str = DEFAULT_INTERVAL) -> RuleOfThirdsResult:
-    klines = fetch_klines(symbol=symbol, interval=interval, limit=5)
-    kline = select_latest_closed_kline(klines)
+    okx_symbol = normalize_symbol(symbol)
+    okx_interval = normalize_interval(interval)
+    candles = fetch_okx_candles(symbol=okx_symbol, interval=okx_interval, limit=5)
+    candle = select_latest_closed_okx_candle(candles, okx_interval)
 
-    open_time_ms = int(kline[0])
-    high = Decimal(str(kline[2]))
-    low = Decimal(str(kline[3]))
-    close_time_ms = int(kline[6])
+    open_time_ms = int(candle[0])
+    high = Decimal(str(candle[2]))
+    low = Decimal(str(candle[3]))
+
+    close_time_ms = open_time_ms
+    bar_ms = interval_to_ms(okx_interval)
+    if bar_ms is not None:
+        close_time_ms = open_time_ms + bar_ms - 1
 
     candle_range = high - low
     one_third = candle_range / Decimal("3")
@@ -101,8 +187,8 @@ def calculate(symbol: str = DEFAULT_SYMBOL, interval: str = DEFAULT_INTERVAL) ->
     calculated_at = datetime.now(timezone.utc)
 
     return RuleOfThirdsResult(
-        symbol=symbol.upper(),
-        interval=interval,
+        symbol=okx_symbol,
+        interval=okx_interval,
         candle_date_utc=open_dt.date().isoformat(),
         candle_open_time_utc=open_dt.isoformat(),
         candle_close_time_utc=close_dt.isoformat(),
@@ -114,6 +200,7 @@ def calculate(symbol: str = DEFAULT_SYMBOL, interval: str = DEFAULT_INTERVAL) ->
         level_2_middle=decimal_to_string(level_2),
         level_3_high_average=decimal_to_string(level_3),
         calculated_at_utc=calculated_at.isoformat(),
+        data_source="OKX public candles",
     )
 
 
@@ -124,6 +211,7 @@ def write_latest_markdown(result: RuleOfThirdsResult, path: Path) -> None:
 | Field | Value |
 |---|---:|
 | Symbol | {result.symbol} |
+| Interval | {result.interval} |
 | Candle date UTC | {result.candle_date_utc} |
 | High | {result.high} |
 | Low | {result.low} |
@@ -132,6 +220,7 @@ def write_latest_markdown(result: RuleOfThirdsResult, path: Path) -> None:
 | Level 1 | {result.level_1_low_third} |
 | Level 2 / Middle | {result.level_2_middle} |
 | Level 3 / High Average | {result.level_3_high_average} |
+| Data Source | {result.data_source} |
 | Calculated at UTC | {result.calculated_at_utc} |
 """
     path.write_text(content, encoding="utf-8")
@@ -264,7 +353,8 @@ def write_index_html(result: RuleOfThirdsResult, path: Path) -> None:
 
     <p class="meta">
       Candle close UTC: {e(result.candle_close_time_utc)}<br>
-      Last updated UTC: {e(result.calculated_at_utc)}
+      Last updated UTC: {e(result.calculated_at_utc)}<br>
+      Source: {e(result.data_source)}
     </p>
   </main>
 </body>
@@ -312,12 +402,13 @@ def write_github_summary(result: RuleOfThirdsResult) -> None:
         f.write(f"- Level 1: **{result.level_1_low_third}**\n")
         f.write(f"- Level 2 / Middle: **{result.level_2_middle}**\n")
         f.write(f"- Level 3 / High Average: **{result.level_3_high_average}**\n")
+        f.write(f"- Source: **{result.data_source}**\n")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Calculate daily XRP/USDT Rule of Thirds levels.")
-    parser.add_argument("--symbol", default=DEFAULT_SYMBOL, help="Trading pair symbol, default: XRPUSDT")
-    parser.add_argument("--interval", default=DEFAULT_INTERVAL, help="Kline interval, default: 1d")
+    parser.add_argument("--symbol", default=DEFAULT_SYMBOL, help="Trading pair symbol, default: XRP-USDT")
+    parser.add_argument("--interval", default=DEFAULT_INTERVAL, help="Candle interval, default: 1Dutc")
     parser.add_argument("--latest-md", default="results/latest.md", help="Path for latest markdown output")
     parser.add_argument("--history-csv", default="results/history.csv", help="Path for history CSV output")
     parser.add_argument("--index-html", default="index.html", help="Path for public GitHub Pages homepage")
@@ -342,6 +433,7 @@ def main() -> int:
         print(f"Level 1 / Low third: {result.level_1_low_third}")
         print(f"Level 2 / Middle: {result.level_2_middle}")
         print(f"Level 3 / High average: {result.level_3_high_average}")
+        print(f"Source: {result.data_source}")
 
     return 0
 
