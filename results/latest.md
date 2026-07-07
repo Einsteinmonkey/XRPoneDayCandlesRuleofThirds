@@ -13,4 +13,4 @@
 | Level 2 / Middle | 1.14633333 |
 | Level 3 / High Average | 1.1648 |
 | Data Source | OKX public candles |
-| Calculated at UTC | 2026-07-07T01:19:28.224467+00:00 |
+| Calculated at UTC | 2026-07-07T02:02:22.386180+00:00 |
