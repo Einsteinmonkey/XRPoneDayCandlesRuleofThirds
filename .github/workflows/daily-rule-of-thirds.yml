@@ -3,7 +3,7 @@ name: Daily XRP Rule of Thirds
 on:
   workflow_dispatch:
   schedule:
-    # Runs at 00:17 UTC, shortly after the UTC daily candle closes.
+    # Runs every day at 00:17 UTC, shortly after the UTC daily candle closes.
     - cron: "17 0 * * *"
 
 permissions:
@@ -23,10 +23,10 @@ jobs:
           python-version: "3.12"
 
       - name: Calculate XRP/USDT Rule of Thirds
-        run: python calculate_rule_of_thirds.py --symbol XRP-USDT --interval 1Dutc
+        run: python calculate_rule_of_thirds.py --symbol XRP-USDT --interval 1Dutc --days 10
 
       - name: Commit updated results
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Update XRP/USDT rule of thirds"
-          file_pattern: "index.html results/latest.md results/history.csv"
+          file_pattern: "index.html results/latest.md results/last_10.md results/history.csv"
