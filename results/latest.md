@@ -4,13 +4,13 @@
 |---|---:|
 | Symbol | XRP-USDT |
 | Interval | 1Dutc |
-| Candle date UTC | 2026-07-28 |
-| High | 1.0704 |
-| Low | 1.0453 |
-| Range | 0.0251 |
-| One Third | 0.00836667 |
-| Level 1 | 1.05366667 |
-| Level 2 / Middle | 1.06203333 |
-| Level 3 / High Average | 1.0704 |
+| Candle date UTC | 2026-07-29 |
+| High | 1.094 |
+| Low | 1.0623 |
+| Range | 0.0317 |
+| One Third | 0.01056667 |
+| Level 1 | 1.07286667 |
+| Level 2 / Middle | 1.08343333 |
+| Level 3 / High Average | 1.094 |
 | Data Source | OKX public candles |
-| Calculated at UTC | 2026-07-29T03:40:46.104606+00:00 |
+| Calculated at UTC | 2026-07-30T03:28:50.178084+00:00 |
